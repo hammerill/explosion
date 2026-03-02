@@ -10,7 +10,7 @@ from PIL import Image, ImageSequence
 
 
 def _default_gif_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "assets" / "explosion.gif"
+    return Path(__file__).resolve().parents[2] / "explosion.gif"
 
 
 def _fit_size(src_w: int, src_h: int, max_w: int, max_h: int) -> tuple[int, int]:
@@ -73,7 +73,7 @@ def _parse_args() -> argparse.Namespace:
         nargs="?",
         type=Path,
         default=_default_gif_path(),
-        help="Path to GIF file (default: assets/explosion.gif).",
+        help="Path to GIF file (default: explosion.gif).",
     )
     parser.add_argument(
         "--once",
