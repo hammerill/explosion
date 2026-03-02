@@ -10,7 +10,7 @@ from PIL import Image, ImageSequence
 
 
 def _default_gif_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "explosion.gif"
+    return Path(__file__).resolve().with_name("assets") / "explosion.gif"
 
 
 def _fit_size(src_w: int, src_h: int, max_w: int, max_h: int) -> tuple[int, int]:
