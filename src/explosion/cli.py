@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import bisect
 import shutil
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 
+import ntplib
 from PIL import Image, ImageSequence
 
 
@@ -64,6 +67,68 @@ def _load_frames(gif_path: Path) -> tuple[list[Image.Image], list[float]]:
     return frames, durations
 
 
+def _build_timeline(delays: list[float]) -> tuple[list[float], float]:
+    edges: list[float] = []
+    total = 0.0
+    for delay in delays:
+        total += delay
+        edges.append(total)
+    return edges, total
+
+
+def _frame_index_for_phase(phase: float, edges: list[float]) -> int:
+    index = bisect.bisect_right(edges, phase)
+    return min(index, len(edges) - 1)
+
+
+class GlobalClock:
+    def __init__(self, server: str, timeout: float, refresh_interval: float) -> None:
+        self.server = server
+        self.timeout = timeout
+        self.refresh_interval = refresh_interval
+        self._client = ntplib.NTPClient()
+        self._offset_seconds = 0.0
+        self._last_sync_mono = 0.0
+        self._has_synced = False
+
+    def sync(self) -> bool:
+        try:
+            response = self._client.request(self.server, version=3, timeout=self.timeout)
+        except Exception:
+            return False
+        self._offset_seconds = float(response.offset)
+        self._last_sync_mono = time.monotonic()
+        self._has_synced = True
+        return True
+
+    def now(self) -> float:
+        should_refresh = (
+            (not self._has_synced)
+            or (time.monotonic() - self._last_sync_mono >= self.refresh_interval)
+        )
+        if should_refresh:
+            self.sync()
+        return time.time() + self._offset_seconds
+
+
+def _global_now_factory(args: argparse.Namespace) -> Callable[[], float]:
+    if args.no_time_sync:
+        return time.time
+
+    clock = GlobalClock(
+        server=args.time_server,
+        timeout=args.sync_timeout,
+        refresh_interval=args.sync_refresh,
+    )
+    if not clock.sync():
+        print(
+            f"warning: failed to sync with {args.time_server}; using local clock.",
+            file=sys.stderr,
+        )
+        return time.time
+    return clock.now
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Play a GIF in a truecolor terminal loop."
@@ -86,6 +151,29 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Force a fixed frame rate (overrides GIF timings).",
     )
+    parser.add_argument(
+        "--no-time-sync",
+        action="store_true",
+        help="Disable global clock sync and use local system time.",
+    )
+    parser.add_argument(
+        "--time-server",
+        type=str,
+        default="time.google.com",
+        help="NTP server used for global playback anchoring.",
+    )
+    parser.add_argument(
+        "--sync-timeout",
+        type=float,
+        default=1.5,
+        help="NTP query timeout in seconds.",
+    )
+    parser.add_argument(
+        "--sync-refresh",
+        type=float,
+        default=300.0,
+        help="How often to refresh NTP offset in seconds.",
+    )
     return parser.parse_args()
 
 
@@ -103,12 +191,21 @@ def main() -> None:
             print("--fps must be greater than 0.", file=sys.stderr)
             raise SystemExit(2)
         delays = [1.0 / args.fps] * len(frames)
+    if args.sync_timeout <= 0:
+        print("--sync-timeout must be greater than 0.", file=sys.stderr)
+        raise SystemExit(2)
+    if args.sync_refresh <= 0:
+        print("--sync-refresh must be greater than 0.", file=sys.stderr)
+        raise SystemExit(2)
+
+    frame_edges, loop_duration = _build_timeline(delays)
+    global_now = _global_now_factory(args)
 
     sys.stdout.write("\x1b[2J\x1b[H\x1b[?25l")
     sys.stdout.flush()
 
     try:
-        while True:
+        if args.once:
             for frame, delay in zip(frames, delays):
                 term = shutil.get_terminal_size(fallback=(80, 24))
                 rendered = _render_frame(frame, term.columns, term.lines)
@@ -116,8 +213,22 @@ def main() -> None:
                 sys.stdout.write(rendered)
                 sys.stdout.flush()
                 time.sleep(delay)
-            if args.once:
-                break
+            return
+
+        while True:
+            phase = global_now() % loop_duration
+            frame_index = _frame_index_for_phase(phase, frame_edges)
+
+            term = shutil.get_terminal_size(fallback=(80, 24))
+            rendered = _render_frame(frames[frame_index], term.columns, term.lines)
+            sys.stdout.write("\x1b[H")
+            sys.stdout.write(rendered)
+            sys.stdout.flush()
+
+            next_edge = frame_edges[frame_index]
+            sleep_for = next_edge - phase
+            if sleep_for > 0:
+                time.sleep(sleep_for)
     except KeyboardInterrupt:
         pass
     finally:
