@@ -81,6 +81,13 @@ def _frame_index_for_phase(phase: float, edges: list[float]) -> int:
     return min(index, len(edges) - 1)
 
 
+def _sleep_until_loop_start(global_now: Callable[[], float], loop_duration: float) -> None:
+    phase = global_now() % loop_duration
+    if phase <= 0:
+        return
+    time.sleep(loop_duration - phase)
+
+
 class GlobalClock:
     def __init__(self, server: str, timeout: float, refresh_interval: float) -> None:
         self.server = server
@@ -214,6 +221,8 @@ def main() -> None:
                 sys.stdout.flush()
                 time.sleep(delay)
             return
+
+        _sleep_until_loop_start(global_now, loop_duration)
 
         while True:
             phase = global_now() % loop_duration
