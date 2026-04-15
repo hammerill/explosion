@@ -1,5 +1,7 @@
-# Explosion
+# Explode the Parrot
+
+Make that parrot explode.
 
 ```bash
-uvx git+https://github.com/hammerill/explosion
+uvx explode-the-parrot
 ```

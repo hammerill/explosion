@@ -1,7 +1,7 @@
 [project]
-name = "explosion"
-version = "0.1.0"
-description = "Explosion."
+name = "explode-the-parrot"
+version = "1.0.0"
+description = "Make that parrot explode."
 readme = "README.md"
 authors = [
     { name = "hammerill", email = "kyrylo@hammerill.com" }
@@ -14,7 +14,11 @@ dependencies = [
 
 [project.scripts]
 explosion = "explosion.cli:main"
+explode-the-parrot = "explosion.cli:main"
 
 [build-system]
-requires = ["uv_build>=0.9.13,<0.10.0"]
+requires = ["uv_build>=0.10.12,<0.11.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "explosion"
