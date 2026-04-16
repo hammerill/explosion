@@ -1,6 +1,6 @@
 [project]
 name = "explode-the-parrot"
-version = "1.0.0"
+version = "1.1.0"
 description = "Make that parrot explode."
 readme = "README.md"
 authors = [

@@ -2,14 +2,27 @@ from __future__ import annotations
 
 import argparse
 import bisect
+import random
 import shutil
 import sys
 import time
+
 from collections.abc import Callable
 from pathlib import Path
 
 import ntplib
+
 from PIL import Image, ImageSequence
+
+
+LOADING_TITLES = [
+    "Loading, please wait...",
+    "Loading detonation timeline, please wait...",
+    "Packing TNT crates, please wait...",
+    "Preparing explosives, please wait...",
+    "Calibrating detonators, please wait...",
+    "Finalizing explosion choreography, please wait...",
+]
 
 
 def _default_gif_path() -> Path:
@@ -86,6 +99,17 @@ def _sleep_until_loop_start(global_now: Callable[[], float], loop_duration: floa
     if phase <= 0:
         return
     time.sleep(loop_duration - phase)
+
+
+def _show_centered_loading_title(title: str, cols: int, rows: int) -> None:
+    safe_cols = max(cols, 1)
+    safe_rows = max(rows, 1)
+
+    trimmed = title[:safe_cols]
+    row = (safe_rows // 2) + 1
+    col = max(1, ((safe_cols - len(trimmed)) // 2) + 1)
+    sys.stdout.write(f"\x1b[{row};{col}H\x1b[1;97m{trimmed}\x1b[0m")
+    sys.stdout.flush()
 
 
 class GlobalClock:
@@ -222,6 +246,12 @@ def main() -> None:
                 time.sleep(delay)
             return
 
+        term = shutil.get_terminal_size(fallback=(80, 24))
+        _show_centered_loading_title(
+            random.choice(LOADING_TITLES),
+            term.columns,
+            term.lines,
+        )
         _sleep_until_loop_start(global_now, loop_duration)
 
         while True:
